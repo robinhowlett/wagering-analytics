@@ -1,0 +1,143 @@
+{
+  "sigma_by_leg_position": {
+    "1": 0.0,
+    "2": 1.0102,
+    "3": 1.0127,
+    "4": 1.0157,
+    "5": 0.9938,
+    "6": 0.9759
+  },
+  "note": "sigma_by_leg_position[N] is the log-normal standard deviation to apply when projecting closing odds for leg N of a horizontal sequence. Leg 1 = 0.0 (closing odds are known). Higher legs = more uncertainty.",
+  "detail_by_bet_type": {
+    "DAILY_DOUBLE": {
+      "1": {
+        "n": 492703,
+        "mean_log_odds": 1.4423,
+        "stddev_log_odds": 0.7283,
+        "stddev_from_leg1": 0.0702
+      },
+      "2": {
+        "n": 496878,
+        "mean_log_odds": 1.4889,
+        "stddev_log_odds": 0.7349,
+        "stddev_from_leg1": 1.0094
+      }
+    },
+    "PICK_3": {
+      "1": {
+        "n": 642831,
+        "mean_log_odds": 1.4733,
+        "stddev_log_odds": 0.7278,
+        "stddev_from_leg1": 0.0628
+      },
+      "2": {
+        "n": 626207,
+        "mean_log_odds": 1.4916,
+        "stddev_log_odds": 0.7303,
+        "stddev_from_leg1": 1.0143
+      },
+      "3": {
+        "n": 643858,
+        "mean_log_odds": 1.5151,
+        "stddev_log_odds": 0.7339,
+        "stddev_from_leg1": 1.0155
+      }
+    },
+    "PICK_4": {
+      "1": {
+        "n": 140290,
+        "mean_log_odds": 1.4508,
+        "stddev_log_odds": 0.733,
+        "stddev_from_leg1": 0.0488
+      },
+      "2": {
+        "n": 141170,
+        "mean_log_odds": 1.4704,
+        "stddev_log_odds": 0.7329,
+        "stddev_from_leg1": 1.0144
+      },
+      "3": {
+        "n": 140392,
+        "mean_log_odds": 1.4658,
+        "stddev_log_odds": 0.729,
+        "stddev_from_leg1": 1.0181
+      },
+      "4": {
+        "n": 141261,
+        "mean_log_odds": 1.5293,
+        "stddev_log_odds": 0.746,
+        "stddev_from_leg1": 1.0281
+      }
+    },
+    "PICK_5": {
+      "1": {
+        "n": 24387,
+        "mean_log_odds": 1.4123,
+        "stddev_log_odds": 0.7254,
+        "stddev_from_leg1": 0.0393
+      },
+      "2": {
+        "n": 24382,
+        "mean_log_odds": 1.4318,
+        "stddev_log_odds": 0.7257,
+        "stddev_from_leg1": 1.0124
+      },
+      "3": {
+        "n": 24389,
+        "mean_log_odds": 1.4553,
+        "stddev_log_odds": 0.7239,
+        "stddev_from_leg1": 1.0076
+      },
+      "4": {
+        "n": 24404,
+        "mean_log_odds": 1.462,
+        "stddev_log_odds": 0.7306,
+        "stddev_from_leg1": 1.0228
+      },
+      "5": {
+        "n": 24394,
+        "mean_log_odds": 1.5263,
+        "stddev_log_odds": 0.7489,
+        "stddev_from_leg1": 1.022
+      }
+    },
+    "PICK_6": {
+      "1": {
+        "n": 63845,
+        "mean_log_odds": 1.37,
+        "stddev_log_odds": 0.7182,
+        "stddev_from_leg1": 0.0427
+      },
+      "2": {
+        "n": 64024,
+        "mean_log_odds": 1.4049,
+        "stddev_log_odds": 0.7104,
+        "stddev_from_leg1": 0.9672
+      },
+      "3": {
+        "n": 63889,
+        "mean_log_odds": 1.4402,
+        "stddev_log_odds": 0.7126,
+        "stddev_from_leg1": 0.9739
+      },
+      "4": {
+        "n": 63993,
+        "mean_log_odds": 1.4749,
+        "stddev_log_odds": 0.7084,
+        "stddev_from_leg1": 0.9855
+      },
+      "5": {
+        "n": 63838,
+        "mean_log_odds": 1.4413,
+        "stddev_log_odds": 0.7031,
+        "stddev_from_leg1": 0.983
+      },
+      "6": {
+        "n": 64087,
+        "mean_log_odds": 1.4801,
+        "stddev_log_odds": 0.7204,
+        "stddev_from_leg1": 0.9759
+      }
+    }
+  }
+}
