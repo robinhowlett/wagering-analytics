@@ -42,7 +42,7 @@ handycapper DB (race_probabilities, exotics, takeout_rates)
 ```
 
 Depends on:
-- V002 + V003 migrations applied (from `redboarders/db/migrations/`)
+- V002 + V003 migrations applied (database views for `race_probabilities`, `race_metrics`, `exotic_race_legs`)
 - `exotic_harville_ratios` table populated (by AN1 SQL in the current session)
 
 ## Theoretical Foundations
@@ -97,4 +97,3 @@ Model output files (`models/`) are used by [race-day-sim](https://github.com/rob
 - [rkm](https://github.com/robinhowlett/rkm) — velocity curve model (measures horse performance)
 - [pdf-importer](https://github.com/robinhowlett/pdf-importer) — loads Equibase PDFs into PostgreSQL
 - [race-day-sim](https://github.com/robinhowlett/race-day-sim) — blinded backtesting (consumes model outputs)
-- [redboarders](https://github.com/robinhowlett/redboarders) — Bet Doctor + Redboarders game (application layer)

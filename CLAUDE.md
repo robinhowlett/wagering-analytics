@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-Wagering Analytics computes fair value benchmarks for pari-mutuel exotic wagers and identifies systematic mispricings. It sits between the performance measurement layer (RKM) and the application layer (Bet Doctor/Redboarders).
+Wagering Analytics computes fair value benchmarks for pari-mutuel exotic wagers and identifies systematic mispricings. It sits between the performance measurement layer (RKM) and the simulation/application layer (race-day-sim).
 
 The core output: for any exotic result (exacta, trifecta, superfecta, pick 3/4/5/6), predict what it SHOULD pay given the odds of the finishers, then compare to what it ACTUALLY paid. The ratio reveals where the crowd over/under-bets.
 
