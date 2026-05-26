@@ -77,17 +77,24 @@ models/
 python -m venv .venv && source .venv/bin/activate
 pip install psycopg2-binary pandas numpy statsmodels scikit-learn joblib
 
-# Database via SSH tunnel
-ssh -f -N -L 5434:127.0.0.1:5432 robinpc
+# Configure database (defaults shown)
+export WA_DB_HOST=localhost
+export WA_DB_PORT=5432
+export WA_DB_NAME=handycapper
+export WA_DB_USER=handycapper
+export WA_DB_PASSWORD=handycapper
 
 # Run in order
-python scripts/populate_stern_fair.py
-python scripts/compute_jitter_calibration.py
-python scripts/fit_payoff_models.py
+python scripts/populate_stern_fair.py        # writes to DB (stern_fair column)
+python scripts/compute_jitter_calibration.py # writes models/jitter_calibration.json
+python scripts/fit_payoff_models.py          # writes models/payoff_*.pkl + .json
 ```
+
+Model output files (`models/`) are used by [race-day-sim](https://github.com/robinhowlett/race-day-sim) for quantitative overlay estimation during blinded simulations.
 
 ## Related Projects
 
 - [rkm](https://github.com/robinhowlett/rkm) — velocity curve model (measures horse performance)
 - [pdf-importer](https://github.com/robinhowlett/pdf-importer) — loads Equibase PDFs into PostgreSQL
+- [race-day-sim](https://github.com/robinhowlett/race-day-sim) — blinded backtesting (consumes model outputs)
 - [redboarders](https://github.com/robinhowlett/redboarders) — Bet Doctor + Redboarders game (application layer)

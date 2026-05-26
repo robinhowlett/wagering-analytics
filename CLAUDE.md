@@ -45,22 +45,32 @@ handycapper DB
 ## Running
 
 ```bash
-ssh -f -N -L 5434:127.0.0.1:5432 robinpc  # tunnel to DB
-
 source .venv/bin/activate
-python scripts/populate_stern_fair.py        # ~3 min
-python scripts/compute_jitter_calibration.py # ~30 sec
-python scripts/fit_payoff_models.py          # ~2 min
+python scripts/populate_stern_fair.py        # ~3 min — writes to DB (updates stern_fair column)
+python scripts/compute_jitter_calibration.py # ~30 sec — reads DB, writes models/jitter_calibration.json
+python scripts/fit_payoff_models.py          # ~2 min — reads DB, writes models/payoff_*.pkl + .json
 ```
 
 Scripts must run in order. `populate_stern_fair.py` requires `exotic_harville_ratios` to already be populated (done via SQL in the AN1 analysis session).
 
-## Environment
+**What writes where:**
+- `populate_stern_fair.py` → UPDATEs `exotic_harville_ratios.stern_fair` column in PostgreSQL
+- `compute_jitter_calibration.py` → writes `models/jitter_calibration.json` (local file only)
+- `fit_payoff_models.py` → writes `models/payoff_*.pkl` + `models/payoff_coefficients.json` (local files only)
 
-Same DB connection as RKM:
-- Host: localhost:5434 (SSH tunnel to robinpc)
-- Database: handycapper
-- User/pass: handycapper/handycapper
+The model JSON files are copied into [race-day-sim](https://github.com/robinhowlett/race-day-sim)/models/ for use during blinded simulations.
+
+## Database
+
+Requires PostgreSQL with the `handycapper` schema. Configure via environment or use defaults:
+
+```bash
+export WA_DB_HOST=localhost
+export WA_DB_PORT=5432
+export WA_DB_NAME=handycapper
+export WA_DB_USER=handycapper
+export WA_DB_PASSWORD=handycapper
+```
 
 ## Specs
 
