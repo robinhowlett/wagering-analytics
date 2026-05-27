@@ -62,6 +62,46 @@ def compute_wcmi(implied_probs: np.ndarray) -> float:
     return float(1.0 - h)
 
 
+def process_year(year: int, conn) -> int:
+    """Process a single year. Returns number of races computed."""
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT r.id as race_id, array_agg(s.odds ORDER BY s.pp) as odds_arr
+        FROM handycapper.races r
+        JOIN handycapper.starters s ON s.race_id = r.id
+        WHERE r.breed = 'TB'
+          AND EXTRACT(YEAR FROM r.date) = %s
+          AND r.number_of_runners >= 3
+          AND s.odds IS NOT NULL AND s.odds > 0
+          AND r.id NOT IN (SELECT race_id FROM handycapper.race_wcmi)
+        GROUP BY r.id
+        HAVING COUNT(*) >= 3
+    """, (year,))
+
+    rows = cur.fetchall()
+    if not rows:
+        cur.close()
+        return 0
+
+    batch = []
+    for race_id, odds_arr in rows:
+        odds = np.array([float(o) for o in odds_arr if o and float(o) > 0])
+        if len(odds) < 2:
+            continue
+        implied = 1.0 / (odds + 1.0)
+        wcmi = compute_wcmi(implied)
+        normalized = implied / implied.sum()
+        max_prob = float(normalized.max())
+        batch.append((race_id, round(wcmi, 4), len(odds), round(max_prob, 4)))
+
+    if batch:
+        _write_batch(cur, batch)
+        conn.commit()
+
+    cur.close()
+    return len(batch)
+
+
 def main():
     conn = get_conn()
     cur = conn.cursor()
@@ -77,47 +117,16 @@ def main():
         );
     """)
     conn.commit()
-
-    log.info("Querying races with odds data (1999-2017)...")
-    cur.execute("""
-        SELECT r.id as race_id, array_agg(s.odds ORDER BY s.pp) as odds_arr
-        FROM handycapper.races r
-        JOIN handycapper.starters s ON s.race_id = r.id
-        WHERE r.breed = 'TB'
-          AND r.date BETWEEN '1999-01-01' AND '2017-12-31'
-          AND r.number_of_runners >= 3
-          AND s.odds IS NOT NULL AND s.odds > 0
-          AND r.id NOT IN (SELECT race_id FROM handycapper.race_wcmi)
-        GROUP BY r.id
-        HAVING COUNT(*) >= 3
-    """)
-
-    rows = cur.fetchall()
-    log.info(f"Computing WCMI for {len(rows)} races...")
-
-    batch = []
-    for i, (race_id, odds_arr) in enumerate(rows):
-        odds = np.array([float(o) for o in odds_arr if o and float(o) > 0])
-        if len(odds) < 2:
-            continue
-        implied = 1.0 / (odds + 1.0)
-        wcmi = compute_wcmi(implied)
-        normalized = implied / implied.sum()
-        max_prob = float(normalized.max())
-        batch.append((race_id, round(wcmi, 4), len(odds), round(max_prob, 4)))
-
-        if len(batch) >= BATCH:
-            _write_batch(cur, batch)
-            conn.commit()
-            log.info(f"  Written {i+1}/{len(rows)} races...")
-            batch = []
-
-    if batch:
-        _write_batch(cur, batch)
-        conn.commit()
-
-    log.info("Done.")
     cur.close()
+
+    log.info("Processing year by year (1999-2017)...")
+    total = 0
+    for year in range(1999, 2018):
+        n = process_year(year, conn)
+        total += n
+        log.info(f"  {year}: {n} races (cumulative: {total})")
+
+    log.info(f"Done. Total: {total} races.")
     conn.close()
 
 

@@ -203,6 +203,24 @@ def safe_ae(wins, expected):
     return None
 
 
+def run_dimension(conn, name: str, sql: str, params: tuple) -> dict:
+    """Run a single dimension query with logging and timing."""
+    import time
+    cur = conn.cursor()
+    log.info(f"  Computing {name}...")
+    t0 = time.time()
+    cur.execute(sql, params)
+    rows = cur.fetchall()
+    elapsed = time.time() - t0
+    result = {}
+    for row in rows:
+        key = f"{row[0]}|{row[1]}"
+        result[key] = (row[2], row[3], row[4])
+    log.info(f"  {name}: {len(result)} trainers in {elapsed:.1f}s")
+    cur.close()
+    return result
+
+
 def main():
     conn = get_conn()
     cur = conn.cursor()
@@ -210,56 +228,56 @@ def main():
     log.info("Creating trainer_ae_profiles table...")
     cur.execute(CREATE_TABLE)
     conn.commit()
+    cur.close()
 
-    log.info("Computing overall trainer stats...")
+    # Phase 1: Overall stats (lightweight)
+    log.info("Phase 1/6: Overall trainer stats...")
+    overall_data = run_dimension(conn, "overall", SQL_OVERALL,
+                                 (DATE_RANGE[0], DATE_RANGE[1], MIN_STARTS))
+    # Convert to richer dict
+    cur = conn.cursor()
     cur.execute(SQL_OVERALL, (DATE_RANGE[0], DATE_RANGE[1], MIN_STARTS))
     overall = {
         f"{row[0]}|{row[1]}": {"last": row[0], "first": row[1], "n": row[2], "wins": row[3], "exp": row[4]}
         for row in cur.fetchall()
     }
+    cur.close()
     log.info(f"  {len(overall)} trainers with {MIN_STARTS}+ starts")
 
+    # Phase 2-6: Each dimension independently (resumable — if one fails, others still computed)
     dimensions = {}
 
-    log.info("Computing FTS dimension...")
-    cur.execute(SQL_FTS, (DATE_RANGE[0], DATE_RANGE[1]))
-    for row in cur.fetchall():
-        key = f"{row[0]}|{row[1]}"
-        dimensions.setdefault(key, {})["fts"] = (row[2], row[3], row[4])
+    for name, sql, params in [
+        ("FTS", SQL_FTS, (DATE_RANGE[0], DATE_RANGE[1])),
+        ("claim", SQL_CLAIM, (DATE_RANGE[0], DATE_RANGE[1])),
+        ("class_drop", SQL_DROP, (DATE_RANGE[0], DATE_RANGE[1])),
+        ("layoff", SQL_LAYOFF, (DATE_RANGE[0], DATE_RANGE[1])),
+        ("surface_switch", SQL_SWITCH, (DATE_RANGE[0], DATE_RANGE[1])),
+    ]:
+        try:
+            result = run_dimension(conn, name, sql, params)
+            for key, vals in result.items():
+                dimensions.setdefault(key, {})[name] = vals
+        except Exception as e:
+            log.error(f"  {name} FAILED: {e}")
+            log.info("  Reconnecting and continuing with remaining dimensions...")
+            try:
+                conn.close()
+            except Exception:
+                pass
+            conn = get_conn()
 
-    log.info("Computing claim dimension...")
-    cur.execute(SQL_CLAIM, (DATE_RANGE[0], DATE_RANGE[1]))
-    for row in cur.fetchall():
-        key = f"{row[0]}|{row[1]}"
-        dimensions.setdefault(key, {})["claim"] = (row[2], row[3], row[4])
-
-    log.info("Computing class drop dimension...")
-    cur.execute(SQL_DROP, (DATE_RANGE[0], DATE_RANGE[1]))
-    for row in cur.fetchall():
-        key = f"{row[0]}|{row[1]}"
-        dimensions.setdefault(key, {})["drop"] = (row[2], row[3], row[4])
-
-    log.info("Computing layoff dimension...")
-    cur.execute(SQL_LAYOFF, (DATE_RANGE[0], DATE_RANGE[1]))
-    for row in cur.fetchall():
-        key = f"{row[0]}|{row[1]}"
-        dimensions.setdefault(key, {})["layoff"] = (row[2], row[3], row[4])
-
-    log.info("Computing surface switch dimension...")
-    cur.execute(SQL_SWITCH, (DATE_RANGE[0], DATE_RANGE[1]))
-    for row in cur.fetchall():
-        key = f"{row[0]}|{row[1]}"
-        dimensions.setdefault(key, {})["switch"] = (row[2], row[3], row[4])
-
-    log.info("Building profiles and writing to DB...")
+    # Phase 7: Write results
+    log.info("Writing profiles to DB...")
+    cur = conn.cursor()
     batch = []
     for key, ov in overall.items():
         dims = dimensions.get(key, {})
-        fts = dims.get("fts", (0, 0, 0))
+        fts = dims.get("FTS", (0, 0, 0))
         claim = dims.get("claim", (0, 0, 0))
-        drop = dims.get("drop", (0, 0, 0))
+        drop = dims.get("class_drop", (0, 0, 0))
         layoff = dims.get("layoff", (0, 0, 0))
-        switch = dims.get("switch", (0, 0, 0))
+        switch = dims.get("surface_switch", (0, 0, 0))
 
         batch.append((
             key,
@@ -272,7 +290,7 @@ def main():
             drop[0], safe_ae(drop[1], drop[2]),
             layoff[0], safe_ae(layoff[1], layoff[2]),
             switch[0], safe_ae(switch[1], switch[2]),
-            0, None,  # jock_upgrade placeholder — requires more complex query
+            0, None,  # jock_upgrade — requires separate complex query
         ))
 
     cur.execute("DELETE FROM handycapper.trainer_ae_profiles")
@@ -294,7 +312,7 @@ def main():
         page_size=5000,
     )
     conn.commit()
-    log.info(f"Written {len(batch)} trainer profiles.")
+    log.info(f"Done. Written {len(batch)} trainer profiles.")
     cur.close()
     conn.close()
 
