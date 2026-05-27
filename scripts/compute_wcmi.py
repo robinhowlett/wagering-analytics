@@ -73,7 +73,6 @@ def process_year(year: int, conn) -> int:
           AND EXTRACT(YEAR FROM r.date) = %s
           AND r.number_of_runners >= 3
           AND s.odds IS NOT NULL AND s.odds > 0
-          AND r.id NOT IN (SELECT race_id FROM handycapper.race_wcmi)
         GROUP BY r.id
         HAVING COUNT(*) >= 3
     """, (year,))
