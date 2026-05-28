@@ -26,7 +26,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
 log = logging.getLogger(__name__)
 
-STERN_K = 0.81
+STERN_K = 0.86  # calibrated 2026-05-27 via calibrate_stern_k.py (MLE on 81K clean races,
+                # using official_position; LL surface is very flat so 0.86-0.88 are nearly equivalent)
 BATCH   = 50_000
 
 
@@ -40,7 +41,7 @@ def stern_harville_prob(
 
     win_probs:        normalized win probabilities for all runners (sums to 1)
     finisher_indices: 0-based indices into win_probs, in finishing order
-    k:                Stern exponent (0.81 empirically confirmed for TB racing)
+    k:                Stern exponent (0.86 calibrated 2026-05-27 on TB racing 1991-2017)
 
     Returns the joint probability of the sequence occurring.
     """
@@ -81,14 +82,19 @@ def fetch_race_probs(conn) -> dict[int, dict[int, float]]:
     return probs_by_race, pos_by_race
 
 
-def fetch_ehr_rows(conn):
+def fetch_ehr_rows(conn, recompute_all: bool = False):
     """
-    Yield rows from exotic_harville_ratios that still need stern_fair populated.
-    Each row: (id, race_id, bet_type, finish_choice_1..4, actual_payoff, pool_size, harville_fair)
-    We need the race_id and the wagering positions of each finisher.
+    Yield rows from exotic_harville_ratios needing stern_fair.
+
+    By default only refreshes NULL rows. Pass recompute_all=True to refresh
+    every row (e.g., after changing STERN_K).
     """
+    where_filter = "ehr.actual_payoff IS NOT NULL"
+    if not recompute_all:
+        where_filter = "ehr.stern_fair IS NULL AND " + where_filter
+
     cur = conn.cursor(name="ehr_cursor", cursor_factory=psycopg2.extras.DictCursor)
-    cur.execute("""
+    cur.execute(f"""
         SELECT
             ehr.id,
             ehr.race_id,
@@ -110,8 +116,7 @@ def fetch_ehr_rows(conn):
             ON rp3.race_id = ehr.race_id AND rp3.wagering_position = 3
         LEFT JOIN race_probabilities rp4
             ON rp4.race_id = ehr.race_id AND rp4.wagering_position = 4
-        WHERE ehr.stern_fair IS NULL
-          AND ehr.actual_payoff IS NOT NULL
+        WHERE {where_filter}
     """)
     return cur
 
@@ -184,6 +189,12 @@ def load_track_by_race(conn) -> dict[int, str]:
 
 
 def main():
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--recompute-all", action="store_true",
+                    help="Refresh stern_fair for every row, not just NULLs (use after changing STERN_K).")
+    args = ap.parse_args()
+
     conn = psycopg2.connect("host=localhost port=5434 dbname=handycapper user=handycapper password=handycapper")
     conn.autocommit = False
 
@@ -191,8 +202,8 @@ def main():
     track_by_race  = load_track_by_race(conn)
     probs_by_race, _ = fetch_race_probs(conn)
 
-    log.info("Computing stern_fair values...")
-    cur    = fetch_ehr_rows(conn)
+    log.info("Computing stern_fair values (k=%.3f, recompute_all=%s)...", STERN_K, args.recompute_all)
+    cur    = fetch_ehr_rows(conn, recompute_all=args.recompute_all)
     write = psycopg2.connect("host=localhost port=5434 dbname=handycapper user=handycapper password=handycapper")
     write.autocommit = False
 
