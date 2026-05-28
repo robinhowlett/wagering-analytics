@@ -30,6 +30,38 @@ STERN_K = 0.86  # calibrated 2026-05-27 via calibrate_stern_k.py (MLE on 81K cle
                 # using official_position; LL surface is very flat so 0.86-0.88 are nearly equivalent)
 BATCH   = 50_000
 
+# Bet-type-specific default takeouts when the (track, bet_type) entry is
+# missing from takeout_rates. Approximate North American averages.
+#
+# Precision note: takeout enters this codebase only through informational
+# fair-value displays — bet evaluation (P&L, ROI) reads ACTUAL paid amounts
+# from the wps + exotics tables, so realized returns are unaffected by the
+# value used here. A ±3 percentage point error in fallback rates moves
+# fair-value ~3-4%, which is dwarfed by other modeling uncertainties (Stern k
+# spread, payoff projection variance, RKM rating bands).
+#
+# The current takeout_rates table covers ~80% of races with a 2009 snapshot.
+# A more accurate setup would version takeouts by effective_date (parsing
+# Christopher Larmey's @derby1592 takeout PDF for a 2026 snapshot would add
+# CAW-limited flags, jackpot/carryover type flags, and specialty-wager
+# attribution) — deferred as a future enhancement, not a critical fix.
+_DEFAULT_TAKEOUT_BY_TYPE = {
+    "WIN":          0.17,
+    "PLACE":        0.17,
+    "SHOW":         0.17,
+    "EXACTA":       0.21,
+    "QUINELLA":     0.21,
+    "TRIFECTA":     0.24,
+    "SUPERFECTA":   0.24,
+    "HI_5":         0.24,
+    "DAILY_DOUBLE": 0.21,
+    "PICK_3":       0.20,
+    "PICK_4":       0.18,
+    "PICK_5":       0.15,
+    "PICK_6":       0.20,
+}
+_DEFAULT_TAKEOUT_FALLBACK = 0.21  # generic exotic if bet type also unrecognized
+
 
 def stern_harville_prob(
     win_probs: np.ndarray,
@@ -157,7 +189,15 @@ def compute_stern_fair(
     if stern_prob <= 0:
         return None
 
-    takeout = takeout_map.get((track, bet_type), takeout_map.get((None, bet_type), 0.20))
+    # Lookup priority: (track, bet_type) → (any track, bet_type) →
+    # bet-type default (varies by pool) → generic exotic fallback.
+    takeout = takeout_map.get(
+        (track, bet_type),
+        takeout_map.get(
+            (None, bet_type),
+            _DEFAULT_TAKEOUT_BY_TYPE.get(bet_type, _DEFAULT_TAKEOUT_FALLBACK),
+        ),
+    )
     return round((1.0 - takeout) / stern_prob, 4)
 
 
