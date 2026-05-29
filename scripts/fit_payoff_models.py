@@ -58,6 +58,10 @@ HORIZONTAL_LEGS = {
     "PICK_6": 6,
 }
 
+# Right-tail winsorization quantile applied to actual_payoff before log-transform.
+# Even after log, a handful of extreme jackpot-style payoffs dominate OLS.
+WINSOR_PCT = 0.995
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Data loading
@@ -144,6 +148,16 @@ def load_vertical(conn, bet_type: str) -> pd.DataFrame:
     df = pd.read_sql(VERTICAL_SQL, conn, params={"bet_type": bet_type})
     n_pos = VERTICAL_POSITIONS[bet_type]
 
+    # Winsorize the right tail before logging. Even after log-transform a
+    # handful of $10K+ trifectas can pull OLS coefficients meaningfully.
+    # Cap at the 99.5th percentile (one-sided — small payoffs aren't outliers
+    # in the same way; the lower-bound clip handles structural zeros below).
+    cap = df["actual_payoff"].quantile(WINSOR_PCT)
+    n_capped = int((df["actual_payoff"] > cap).sum())
+    if n_capped > 0:
+        log.info("  winsorizing %d/%d (%.2f%%) payoffs > $%.2f (P%g)",
+                 n_capped, len(df), 100.0 * n_capped / len(df), cap, WINSOR_PCT * 100)
+        df["actual_payoff"] = df["actual_payoff"].clip(upper=cap)
     df["log_payoff"] = np.log(df["actual_payoff"])
     df["log_pool"]   = np.log(df["pool_size"])
 
@@ -189,6 +203,13 @@ def load_horizontal(conn, bet_type: str) -> pd.DataFrame:
     # Ensure numeric types
     df["actual_payoff"] = pd.to_numeric(df["actual_payoff"], errors="coerce")
     df["pool_size"] = pd.to_numeric(df["pool_size"], errors="coerce")
+    # Winsorize the right tail before logging — see load_vertical for rationale.
+    cap = df["actual_payoff"].dropna().quantile(WINSOR_PCT)
+    n_capped = int((df["actual_payoff"] > cap).sum())
+    if n_capped > 0:
+        log.info("  winsorizing %d/%d (%.2f%%) payoffs > $%.2f (P%g)",
+                 n_capped, len(df), 100.0 * n_capped / len(df), cap, WINSOR_PCT * 100)
+        df["actual_payoff"] = df["actual_payoff"].clip(upper=cap)
     df["log_payoff"] = np.log(df["actual_payoff"].clip(lower=0.01))
     df["log_pool"]   = np.log(df["pool_size"].clip(lower=1))
 

@@ -106,21 +106,37 @@ WITH claims AS (
     FROM handycapper.starters s
     JOIN handycapper.races r ON r.id = s.race_id
     WHERE s.claimed = true AND r.breed = 'TB'
+      AND r.surface = 'Dirt' AND r.track_condition = 'Fast'
       AND r.date BETWEEN %s AND %s
       AND s.horse IS NOT NULL
 ),
-post_claim AS (
-    SELECT c.horse, c.claim_date,
+-- Each post-claim start belongs to the MOST RECENT prior claim within 180d.
+-- Without this dedupe, a horse claimed twice in close succession had its
+-- subsequent starts double-counted (one row per claim_date * race within
+-- both 180d windows). Pick the latest matching claim_date per (horse, start).
+post_claim_per_start AS (
+    SELECT s.id AS starter_id, c.horse, c.claim_date,
         s.trainer_last, s.trainer_first,
-        s.official_position, s.odds,
-        ROW_NUMBER() OVER (PARTITION BY c.horse, c.claim_date ORDER BY r.date) as rn
+        s.official_position, s.odds, r.date AS race_date,
+        ROW_NUMBER() OVER (
+            PARTITION BY s.id
+            ORDER BY c.claim_date DESC
+        ) AS claim_rank
     FROM claims c
     JOIN handycapper.starters s ON s.horse = c.horse
     JOIN handycapper.races r ON r.id = s.race_id
     WHERE r.date > c.claim_date
       AND r.date <= c.claim_date + interval '180 days'
-      AND r.breed = 'TB' AND r.number_of_runners >= 5
+      AND r.breed = 'TB' AND r.surface = 'Dirt' AND r.track_condition = 'Fast'
+      AND r.number_of_runners >= 5
       AND s.odds IS NOT NULL AND s.odds > 0
+),
+post_claim AS (
+    SELECT horse, claim_date, trainer_last, trainer_first,
+        official_position, odds,
+        ROW_NUMBER() OVER (PARTITION BY horse, claim_date ORDER BY race_date) as rn
+    FROM post_claim_per_start
+    WHERE claim_rank = 1
 )
 SELECT trainer_last, trainer_first,
     COUNT(*) as n,
@@ -172,6 +188,13 @@ GROUP BY s.trainer_last, s.trainer_first
 HAVING COUNT(*) >= 10
 """
 
+# SURFACE_SWITCH is intentionally NOT filtered to a single surface (unlike
+# DROP/LAYOFF/CLAIM which constrain to Dirt/Fast). A switch event spans two
+# surfaces by definition, so a per-surface filter would discard the signal.
+# The track-condition filter is also dropped for the same reason: a switch
+# to/from turf doesn't have a "Fast" surface analogue. This means the SWITCH
+# A/E baseline differs from the other dimensions; consumers comparing them
+# should treat SWITCH as measured against a broader population.
 SQL_SWITCH = """
 WITH sequential AS (
     SELECT s.trainer_last, s.trainer_first,
