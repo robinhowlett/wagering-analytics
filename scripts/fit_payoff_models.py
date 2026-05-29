@@ -80,7 +80,14 @@ SELECT
     ehr.finish_choice_2,
     ehr.finish_choice_3,
     ehr.finish_choice_4,
-    -- Odds of each ordered finisher
+    -- Odds of each ordered finisher.
+    -- Positions 1-3 join via race_probabilities.wagering_position
+    -- (a WPS-payout-attribution column that correctly handles coupled
+    -- entries for top-3 finishers). Positions 4-5 are NOT in
+    -- wagering_position (it is structurally 1-3 only — a WPS pool
+    -- pays only top-3), so we resolve those via starters.official_position
+    -- joined to race_probabilities by starter_id. SUPERFECTA and HI_5
+    -- depend on this; EXACTA/TRIFECTA only need rp1-rp3.
     rp1.odds AS odds_1,
     rp2.odds AS odds_2,
     rp3.odds AS odds_3,
@@ -93,10 +100,14 @@ LEFT JOIN race_probabilities rp2
     ON rp2.race_id = ehr.race_id AND rp2.wagering_position = 2
 LEFT JOIN race_probabilities rp3
     ON rp3.race_id = ehr.race_id AND rp3.wagering_position = 3
+LEFT JOIN starters s4
+    ON s4.race_id = ehr.race_id AND s4.official_position = 4
 LEFT JOIN race_probabilities rp4
-    ON rp4.race_id = ehr.race_id AND rp4.wagering_position = 4
+    ON rp4.starter_id = s4.id
+LEFT JOIN starters s5
+    ON s5.race_id = ehr.race_id AND s5.official_position = 5
 LEFT JOIN race_probabilities rp5
-    ON rp5.race_id = ehr.race_id AND rp5.wagering_position = 5
+    ON rp5.starter_id = s5.id
 WHERE ehr.bet_type = %(bet_type)s
   AND ehr.actual_payoff > 0
   AND ehr.pool_size    > 0
@@ -178,8 +189,15 @@ def load_vertical(conn, bet_type: str) -> pd.DataFrame:
         if surf not in df.columns:
             df[surf] = 0.0
 
-    df = df.dropna(subset=["log_payoff", "log_pool", "log_odds_1"])
-    log.info("  %d rows after cleaning.", len(df))
+    # Drop rows missing any of the position-odds we need for this bet type.
+    # SUPERFECTA needs odds_1..odds_4; HI_5 needs odds_1..odds_5. The
+    # rp4/rp5 joins via starters.official_position can yield NULL when
+    # finish data is incomplete (≪1% of rows).
+    required = ["log_payoff", "log_pool"] + [f"log_odds_{i}" for i in range(1, n_pos + 1)]
+    before = len(df)
+    df = df.dropna(subset=required)
+    log.info("  %d rows after cleaning (dropped %d for missing position odds).",
+             len(df), before - len(df))
     return df
 
 
